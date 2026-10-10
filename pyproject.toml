@@ -1,0 +1,301 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aegisx"
+version = "2.1.1"
+description = "Production-grade email automation platform with async sending, security, tracking, and campaign management"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.12,<3.13"
+authors = [
+    {name = "AEGISX Team"}
+]
+keywords = ["email", "automation", "campaign", "smtp", "bulk-email", "tracking", "webhooks"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    # Core - Pinned versions for stability
+    "aiosmtplib==3.0.2",
+    "pyyaml==6.0.1",
+    "click==8.1.7",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    
+    # Database
+    "sqlalchemy>=2.0.36",
+    "alembic==1.13.1",
+    
+    # Web UI
+    "flask==3.1.3",
+    "flask-socketio==5.3.6",
+    "python-socketio==5.14.0",
+    "flask-login==0.6.3",
+    "flask-limiter==3.5.1",
+    "flask-cors==4.0.2",
+    "flask-wtf==1.2.1",
+
+    # Production WSGI/ASGI server stack
+    # gunicorn + eventlet are runtime deps because run.py execs gunicorn with
+    # the eventlet worker class. Pinned in requirements.txt; mirrored here so
+    # `pip install aegisx` (without requirements.txt) produces a runnable app.
+    "gunicorn==22.0.0",
+    "eventlet==0.40.3",
+
+    # Security
+    "cryptography==46.0.7",
+    "passlib==1.7.4",
+    "bcrypt==4.1.2",
+    
+    # Document Generation
+    "qrcode[pil]==7.4.2",
+    "pillow==10.4.0",
+    "reportlab==4.0.9",
+    "python-docx==1.1.0",
+    
+    # Email
+    "email-validator==2.1.0.post1",
+    
+    # Async I/O
+    "aiofiles==23.2.1",
+    
+    # Scheduling
+    "apscheduler==3.10.4",
+    
+    # HTTP Client (webhooks)
+    "httpx==0.26.0",
+    
+    # Logging
+    "structlog==24.1.0",
+    "python-json-logger==2.0.7",
+    
+    # Utilities
+    "python-dotenv==1.2.2",
+    "tqdm==4.66.3",
+    "pysocks==1.7.1",
+    "rich==13.7.0",
+    # platformdirs is imported unconditionally by utils/app_dirs.py; without
+    # it `import aegisx` fails on a fresh wheel install.
+    "platformdirs>=4.0.0",
+
+    # Pure-Python features on core code paths — guarded imports with graceful
+    # fallbacks, but required for a fully-functional install:
+    #   charset-normalizer sniffs non-UTF8 CSV encodings on recipient import
+    #                      (services/campaign_service.py)
+    #   faker              powers the {{fake.*}} template placeholders
+    #                      (features/placeholders.py)
+    "charset-normalizer>=3.0",
+    "faker==22.5.1",
+]
+
+[project.optional-dependencies]
+# Single source of truth for dev tooling — the former requirements-dev.txt was
+# folded in here. Install with `pip install -e ".[dev]"`.
+dev = [
+    # Testing
+    "pytest==8.0.0",
+    "pytest-asyncio==0.23.3",
+    "pytest-cov==4.1.0",
+    "pytest-mock==3.12.0",
+    "pytest-xdist==3.5.0",
+    "pytest-timeout==2.2.0",
+    "aiosmtpd==1.4.6",
+    "playwright==1.42.0",
+    "pytest-playwright==0.4.4",
+    # Lint / format / type / security
+    "ruff==0.1.14",
+    "mypy==1.8.0",
+    "bandit==1.7.6",
+    "pip-audit==2.7.0",
+    # Type stubs
+    "types-pyyaml==6.0.12.12",
+    "types-aiofiles==25.1.0.20260518",
+    "types-pillow==10.2.0.20240125",
+    "types-tqdm==4.66.0.20240106",
+    # Interactive / hooks
+    "ipython==8.20.0",
+    "ipdb==0.13.13",
+    "pre-commit==3.6.0",
+    # faker moved to core [project.dependencies] — it backs a runtime templating
+    # feature, not just tests; dev inherits it from core.
+]
+pdf = [
+    # Better PDF generation. Requires system libraries: pango/cairo for
+    # WeasyPrint, and Poppler for pdf2image's HTML->PNG rasterization
+    # (macOS: `brew install poppler pango`; Debian: `apt install poppler-utils
+    # libpango-1.0-0`). The Python packages install without them; only runtime
+    # rendering needs the system libs.
+    "weasyprint>=60.0",
+    "pdf2image>=1.17",
+]
+geo = [
+    # Offline IP→geolocation via MaxMind GeoLite2. Operators must download
+    # the GeoLite2-City.mmdb file (free with a license key, redistribution
+    # restricted) and point AEGISX_GEOIP_DB at it. With no DB configured,
+    # {{location.*}} placeholders resolve to empty strings.
+    "geoip2>=4.7",
+]
+observability = [
+    # Error tracking (SENTRY_DSN) + Prometheus /metrics. Both are optional at
+    # runtime — the web app import-guards them, so a core install still boots.
+    "sentry-sdk[flask]>=2.0",
+    "prometheus-client>=0.20",
+]
+postgres = [
+    # PostgreSQL driver for DATABASE_URL=postgresql://... (SQLite needs none).
+    "psycopg2-binary>=2.9.9",
+]
+redis = [
+    # Shared state for Redis rate limiting, SocketIO cross-worker fan-out
+    # (SOCKETIO_MESSAGE_QUEUE), and distributed locks.
+    "redis>=5.0",
+]
+worker = [
+    # arq task queue for the optional worker tier (CAMPAIGN_EXECUTION_MODE=
+    # worker), which decouples campaign execution from the web process.
+    "arq>=0.26",
+]
+all = [
+    "aegisx[dev,pdf,geo,observability,postgres,redis,worker]",
+]
+
+[project.scripts]
+aegisx = "aegisx.cli.main:main"
+
+[project.urls]
+Homepage = "https://github.com/0fukuAkz/AEGISX"
+Documentation = "https://github.com/0fukuAkz/AEGISX#readme"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Non-Python resources that must ship inside the wheel. Without this, the
+# web app installs but every page returns 500 — Flask can't find base.html
+# or any other template. The previous PyInstaller spec listed these as
+# `datas`; with the spec deleted, the wheel needs to own the declaration.
+# Migrations live at the repo root (`migrations/`), not under src/aegisx/,
+# so they are NOT included in the wheel — operators must run
+# `alembic upgrade head` from a clone or container, not from a pip install.
+[tool.setuptools.package-data]
+"aegisx.web" = [
+    "templates/*.html",
+    "templates/**/*.html",
+    "static/**/*",
+]
+# Alembic migrations now live inside the package so a pip install can migrate
+# its own DB via `aegisx db migrate`. env.py / script.py.mako / the version
+# scripts are loaded by path (not imported as modules), so they ship as data.
+"aegisx" = [
+    "migrations/*.py",
+    "migrations/*.mako",
+    "migrations/versions/*.py",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Alembic migrations are autogenerated then hand-edited for DB portability;
+# don't hold them to app-code lint rules (line length, import order, etc.).
+extend-exclude = ["src/aegisx/migrations"]
+
+# Globally ignored rules:
+# - E712: `Column == True` is the SQLAlchemy filter-expression idiom, not a
+#   Python identity-vs-equality bug. Rewriting as `is True` would break the
+#   query (it would no longer compile to SQL).
+ignore = ["E712"]
+
+# Extend the default (E, F) rule set with:
+# - T201: ban `print()` in src/. The codebase uses structlog; print() bypasses
+#   the configured handlers (JSON output, log file, log levels) and silently
+#   degrades observability in production. Per-file-ignores below allow it in
+#   CLI-adjacent scripts where stdout *is* the interface.
+extend-select = ["T201"]
+
+[tool.ruff.per-file-ignores]
+# Tests get more ergonomic latitude:
+#   F841 — `with patch(...) as mock_X` patterns where the binding is
+#          intentional documentation even when unused.
+#   E701 — multi-statement lines like `if cond: assert ...` common in tests.
+#   E741 — single-letter names (`l`, `i`) in throwaway scopes.
+#   T201 — tests legitimately use print() for diagnostic output.
+"tests/**/*.py" = ["F841", "E701", "E741", "T201"]
+# E2E suite can import availability probes that look unused.
+"tests/e2e/**/*.py" = ["F401"]
+# scripts/ and examples/ are CLI-adjacent — stdout is the interface.
+"scripts/**/*.py" = ["T201"]
+"examples/**/*.py" = ["T201"]
+# run.py is the CLI launcher entry point — print() is the interface.
+"run.py" = ["T201"]
+# migrations/env.py is alembic-generated; don't fight upstream.
+"migrations/**/*.py" = ["T201"]
+
+[tool.mypy]
+python_version = "3.12"
+# Alembic migrations are autogenerated scripts (untyped alembic ops); keep them
+# out of the strict type gate.
+exclude = "src/aegisx/migrations/"
+# Type-check the bodies of functions that lack full annotations (does not require
+# annotations; use disallow_untyped_defs = true for that enforcement).
+check_untyped_defs = true
+# SQLAlchemy ORM models use 2.0-native ``Mapped[X]`` / ``mapped_column``
+# typing, so no mypy plugin is needed (the deprecated ext.mypy plugin was
+# removed once the models were migrated). mypy types model *attributes*
+# precisely from the Mapped[] annotations; constructor kwargs go through
+# SQLAlchemy's generic declarative ``__init__`` at runtime.
+
+# Quiet the [import-untyped] noise for third-party libraries that ship
+# no type stubs. These are runtime-only deps that mypy can't introspect,
+# and complaining about every import buries the real diagnostics under
+# 40+ stub-missing errors. Adding `# type: ignore[import-untyped]` at
+# every call site would be louder than a single config block.
+[[tool.mypy.overrides]]
+module = [
+    "apscheduler.*",
+    "docx",
+    "eventlet",
+    "eventlet.*",
+    "faker",
+    "faker.*",
+    "flask_login",
+    "flask_socketio",
+    "flask_socketio.*",
+    "flask_wtf.*",
+    "qrcode",
+    "qrcode.*",
+    "reportlab.*",
+    "tqdm",
+    "weasyprint",
+    # Optional, ImportError-guarded imports that a core install may lack, so
+    # mypy's result must not depend on their being transitively present:
+    #   * pdf2image        — HTML→PNG rasterizer (features/generators.py)
+    #   * charset_normalizer — CSV encoding sniffing (services/campaign_service.py)
+    "pdf2image",
+    "charset_normalizer",
+    # Optional feature/observability deps that live only in their extras
+    # (arq→worker, geoip2→geo, redis, prometheus_client & sentry_sdk→
+    # observability). Listing them keeps `mypy src/` clean whether or not those
+    # extras are installed in the checking environment.
+    "arq",
+    "arq.*",
+    "geoip2",
+    "geoip2.*",
+    "prometheus_client",
+    "prometheus_client.*",
+    "redis",
+    "redis.*",
+    "sentry_sdk",
+    "sentry_sdk.*",
+]
+ignore_missing_imports = true
+
+# NOTE: pytest is configured in pytest.ini (the single source of truth —
+# it also carries the coverage gate and markers). pytest prefers pytest.ini
+# over pyproject.toml, so a [tool.pytest.ini_options] table here would be
+# silently ignored and only cause drift. Keep pytest config in pytest.ini.
